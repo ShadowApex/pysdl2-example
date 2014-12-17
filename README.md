@@ -4,6 +4,8 @@ PySDL2 Physics Example
 This is a simple physics example using pymunk and PySDL2. Asteroids are
 randomly generated with random velocities.
 
+![screenshot](screenshot.png)
+
 
 Dependencies
 -------------
