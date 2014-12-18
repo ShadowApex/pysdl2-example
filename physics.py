@@ -82,7 +82,7 @@ class TextureRenderer(sdl2.ext.TextureSpriteRenderSystem):
 
 
 class SpaceObject(object):
-    def __init__(self, sprite, sprite_original):
+    def __init__(self, sprite, sprite_original=None):
         self.body = pymunk.Body(1,moment=66)
         self.sprite = sprite
         self.sprite_original = sprite_original
@@ -99,6 +99,7 @@ class SpaceObject(object):
                                                   self.body.angle,
                                                   1.0,
                                                   1).contents
+            sdl2.SDL_FreeSurface(self.sprite.surface)
             self.sprite.surface = surface
 
         self.sprite.angle = self.body.angle
@@ -139,7 +140,10 @@ def run():
 
     for i in range(count):
         sp_asteroid = factory.from_image('resources/gfx/asteroid_1.png')
-        sp_asteroid_original = factory.from_image('resources/gfx/asteroid_1.png')
+        if RENDERER == "software":
+            sp_asteroid_original = factory.from_image('resources/gfx/asteroid_1.png')
+        else:
+            sp_asteroid_original = None
         asteroid = SpaceObject(sp_asteroid, sp_asteroid_original)
         asteroid.body.velocity = random.randrange(-vel, vel), random.randrange(-vel, vel)
         asteroid.body.position = random.randrange(0, 800), random.randrange(0, 600)
