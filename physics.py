@@ -18,10 +18,17 @@ import sdl2
 import sdl2.ext
 import sdl2.sdlgfx
 
+from sdl2 import rect, render
+from sdl2.ext.compat import isiterable
+
 import pymunk
 import math, sys
 import random
 import time
+
+
+# This can be either "software" or "texture"
+RENDERER = "texture"
 
 
 class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
@@ -32,6 +39,46 @@ class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
         # Fill the screen with black every frame.
         sdl2.ext.fill(self.surface, sdl2.ext.Color(0, 0, 0))
         super(SoftwareRenderer, self).render(components)
+
+
+class TextureRenderer(sdl2.ext.TextureSpriteRenderSystem):
+    def __init__(self, target):
+        super(TextureRenderer, self).__init__(target)
+
+    def render(self, sprites, x=None, y=None):
+        """Overrides the render method of sdl2.ext.TextureSpriteRenderSystem to
+        use "SDL_RenderCopyEx" instead of "SDL_RenderCopy" to allow sprite
+        rotation:
+
+        http://wiki.libsdl.org/SDL_RenderCopyEx
+        """
+        r = rect.SDL_Rect(0, 0, 0, 0)
+        if isiterable(sprites):
+            rcopy = render.SDL_RenderCopyEx
+            renderer = self.sdlrenderer
+            x = x or 0
+            y = y or 0
+            for sp in sprites:
+                r.x = x + sp.x
+                r.y = y + sp.y
+                r.w, r.h = sp.size
+                if rcopy(renderer, sp.texture, None, r, sp.angle, None, render.SDL_FLIP_NONE) == -1:
+                    raise SDLError()
+        else:
+            r.x = sprites.x
+            r.y = sprites.y
+            r.w, r.h = sprites.size
+            if x is not None and y is not None:
+                r.x = x
+                r.y = y
+            render.SDL_RenderCopyEx(self.sdlrenderer,
+                                    sprites.texture,
+                                    None,
+                                    r,
+                                    sprites.angle,
+                                    None,
+                                    render.SDL_FLIP_NONE)
+        render.SDL_RenderPresent(self.sdlrenderer)
 
 
 class SpaceObject(object):
@@ -46,12 +93,15 @@ class SpaceObject(object):
         self.shapes[0].friction - 0.5
 
     def update(self):
-        surface = sdl2.sdlgfx.rotozoomSurface(self.sprite_original.surface,
-                                              self.body.angle,
-                                              1.0,
-                                              1).contents
-        self.sprite.surface = surface
+        # If we're using software rendering, do rotation using sdlgfx.
+        if RENDERER == "software":
+            surface = sdl2.sdlgfx.rotozoomSurface(self.sprite_original.surface,
+                                                  self.body.angle,
+                                                  1.0,
+                                                  1).contents
+            self.sprite.surface = surface
 
+        self.sprite.angle = self.body.angle
         self.sprite.x = int(self.body.position[0]) - (self.sprite.size[0] / 2)
         self.sprite.y = int(self.body.position[1]) - (self.sprite.size[1] / 2)
 
@@ -66,21 +116,26 @@ def run():
     space.gravity = 0.0, 0.0
 
     # Set up our renderer.
-    spriterenderer = SoftwareRenderer(window)
-
-    # Add our systems that our world will run every frame.
-    world.add_system(spriterenderer)
+    if RENDERER == "software":
+        spriterenderer = SoftwareRenderer(window)
+    elif RENDERER == "texture":
+        texture_renderer = sdl2.ext.Renderer(window)
+        spriterenderer = TextureRenderer(texture_renderer)
+    
 
     # Create our paddle sprites from our sprite factory.
-    factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
+    if RENDERER == "software":
+        factory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
+    elif RENDERER == "texture":
+        factory = sdl2.ext.SpriteFactory(sdl2.ext.TEXTURE, renderer=texture_renderer)
 
     asteroids = []
     asteroid_sprites = []
 
     # Set the number of asteroids and their velocity.
     count = 100
-    vel = 100   # velocity
-    avel = 500  # angular velocity
+    vel = 10   # velocity
+    avel = 50  # angular velocity
 
     for i in range(count):
         sp_asteroid = factory.from_image('resources/gfx/asteroid_1.png')
@@ -120,6 +175,8 @@ def run():
             item.update()
 
         # Render our asteroids.
+        if RENDERER == "texture":
+            texture_renderer.clear()
         spriterenderer.render(asteroid_sprites)
         window.refresh()
 
